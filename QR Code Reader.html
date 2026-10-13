@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR & Barcode Reader</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- html5-qrcode scanner library -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          },
+          animation: {
+            'scan-line': 'scan 2.2s ease-in-out infinite alternate',
+            'pulse-subtle': 'pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          },
+          keyframes: {
+            scan: {
+              '0%': { transform: 'translateY(8%)', opacity: '0.4' },
+              '50%': { opacity: '1' },
+              '100%': { transform: 'translateY(92%)', opacity: '0.4' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom scan target styling & camera frame overrides */
+    #qr-reader {
+      border: none !important;
+    }
+    #qr-reader video {
+      border-radius: 1rem;
+      object-fit: cover !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    #qr-reader__scan_region {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #qr-reader__dashboard_section_csr,
+    #qr-reader__dashboard_section_swaplink,
+    #qr-reader__header_message {
+      display: none !important;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(156, 163, 175, 0.4);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(156, 163, 175, 0.7);
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-full flex flex-col font-sans transition-colors duration-200">
+  <header class="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-400 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+          <i data-lucide="scan-line" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight leading-tight">QuickPixel</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Browser-Powered QR & Barcode Engine</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <!-- Torch/Flashlight toggle (Conditional) -->
+        <button id="torch-btn" class="hidden p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors" title="Toggle Flashlight">
+          <i data-lucide="zap" class="w-5 h-5"></i>
+        </button>
+
+        <!-- Theme Toggle -->
+        <button id="theme-toggle" class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors" aria-label="Toggle Theme">
+          <i id="theme-icon-sun" data-lucide="sun" class="w-5 h-5 hidden"></i>
+          <i id="theme-icon-moon" data-lucide="moon" class="w-5 h-5"></i>
+        </button>
+
+        <!-- Audio Beep Toggle -->
+        <button id="audio-toggle-btn" class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors" title="Toggle audio feedback">
+          <i id="audio-icon" data-lucide="volume-2" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 md:py-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    
+    <!-- Left Column: Scanner & Viewport (7 Cols) -->
+    <div class="lg:col-span-7 flex flex-col space-y-4">
+      
+      <!-- Scan Mode Selector Tabs -->
+      <div class="bg-slate-200/70 dark:bg-slate-800/70 p-1.5 rounded-xl flex items-center space-x-1.5">
+        <button id="tab-live" class="flex-1 py-2 px-3.5 rounded-lg text-sm font-semibold flex items-center justify-center space-x-2 transition-all shadow-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-white">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+          <span>Live Camera</span>
+        </button>
+        <button id="tab-upload" class="flex-1 py-2 px-3.5 rounded-lg text-sm font-medium flex items-center justify-center space-x-2 transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white">
+          <i data-lucide="image" class="w-4 h-4"></i>
+          <span>Upload / Drop Image</span>
+        </button>
+      </div>
+
+      <!-- CAMERA VIEWPORT CONTAINER -->
+      <div id="camera-section" class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-sm">
+        
+        <!-- Camera Controls Toolbar -->
+        <div class="flex flex-col sm:flex-row gap-3 mb-4 items-stretch sm:items-center justify-between">
+          <div class="relative flex-1">
+            <select id="camera-select" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none pr-9 cursor-pointer">
+              <option value="">Detecting cameras...</option>
+            </select>
+            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+              <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </div>
+          </div>
+
+          <div class="flex gap-2">
+            <button id="start-btn" class="flex-1 sm:flex-initial inline-flex items-center justify-center space-x-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm shadow-brand-500/20 disabled:opacity-50 disabled:pointer-events-none">
+              <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+              <span>Start</span>
+            </button>
+            <button id="stop-btn" disabled class="flex-1 sm:flex-initial inline-flex items-center justify-center space-x-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50 disabled:pointer-events-none">
+              <i data-lucide="square" class="w-4 h-4 fill-current"></i>
+              <span>Stop</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="relative w-full aspect-[4/3] sm:aspect-[16/11] bg-black rounded-xl overflow-hidden flex items-center justify-center group shadow-inner">
+          
+          <!-- Library Target Container -->
+          <div id="qr-reader" class="w-full h-full"></div>
+
+          <!-- Standby / Idle Placeholder -->
+          <div id="scanner-idle" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-slate-300 p-6 text-center z-10 transition-opacity duration-300">
+            <div class="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mb-3 text-brand-400 shadow-lg">
+              <i data-lucide="video" class="w-8 h-8"></i>
+            </div>
+            <p class="font-semibold text-slate-200 text-base">Camera is Stopped</p>
+            <p class="text-xs text-slate-400 mt-1 max-w-xs">Select a camera above and hit "Start" to scan QR codes or barcodes in real time.</p>
+          </div>
+
+          <!-- Scanning HUD Reticle (Visible when scanner is running) -->
+          <div id="scan-hud" class="hidden absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
+            <!-- Semi-transparent backdrop framing -->
+            <div class="relative w-64 h-64 sm:w-72 sm:h-72 border border-white/20 rounded-2xl overflow-hidden backdrop-blur-[1px]">
+              
+              <!-- Reticle Corner Markers -->
+              <div class="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-brand-500 rounded-tl-lg"></div>
+              <div class="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-brand-500 rounded-tr-lg"></div>
+              <div class="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-brand-500 rounded-bl-lg"></div>
+              <div class="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-brand-500 rounded-br-lg"></div>
+
+              <!-- Animated Laser Scan Bar -->
+              <div class="w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent shadow-[0_0_12px_#6366f1] animate-scan-line"></div>
+
+              <span class="absolute bottom-3 inset-x-0 text-center text-[11px] font-medium tracking-wide uppercase text-white/70 bg-black/40 py-0.5 mx-auto w-fit px-3 rounded-full">
+                Align QR Code Inside
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scanner Status Footer Bar -->
+        <div class="mt-3.5 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
+          <div class="flex items-center space-x-2">
+            <span id="scanner-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+            <span id="scanner-status-text">Standby</span>
+          </div>
+          <span class="text-[11px]">Supports QR, Aztec, UPC, EAN, Code 128</span>
+        </div>
+      </div>
+
+      <div id="upload-section" class="hidden bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+        <label for="qr-file-input" class="relative cursor-pointer group flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-500 dark:hover:border-brand-500 rounded-2xl p-8 sm:p-12 text-center transition-all bg-slate-50/50 dark:bg-slate-900/50 hover:bg-brand-50/30 dark:hover:bg-brand-950/20">
+          <div class="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-brand-600 dark:text-brand-400 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform shadow-sm">
+            <i data-lucide="upload-cloud" class="w-8 h-8"></i>
+          </div>
+          <p class="text-sm font-semibold text-slate-800 dark:text-slate-200">Drag & drop your QR image here, or <span class="text-brand-600 dark:text-brand-400 underline underline-offset-2">browse</span></p>
+          <p class="text-xs text-slate-400 dark:text-slate-500 mt-1.5">PNG, JPG, WEBP, BMP or SVG up to 15MB</p>
+          <input id="qr-file-input" type="file" accept="image/*" class="sr-only" />
+        </label>
+
+        <!-- Image Preview Container -->
+        <div id="file-preview-card" class="hidden mt-4 p-3 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-between">
+          <div class="flex items-center space-x-3 overflow-hidden">
+            <img id="file-thumb" src="" alt="Uploaded QR" class="w-12 h-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 bg-white" />
+            <div class="min-w-0">
+              <p id="file-name" class="text-xs font-semibold truncate text-slate-800 dark:text-slate-200">sample-qr.png</p>
+              <p id="file-meta" class="text-[11px] text-slate-500 dark:text-slate-400">Processing image...</p>
+            </div>
+          </div>
+          <button id="clear-file-btn" class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition-colors">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Column: Result Inspector & History (5 Cols) -->
+    <div class="lg:col-span-5 flex flex-col space-y-5">
+      
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center space-x-2">
+            <span class="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
+              <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+            </span>
+            <h2 class="text-sm font-semibold">Active Scan Output</h2>
+          </div>
+          <span id="result-format-badge" class="hidden text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">QR_CODE</span>
+        </div>
+
+        <!-- Result Body -->
+        <div id="no-result-state" class="py-10 text-center text-slate-400 dark:text-slate-500">
+          <i data-lucide="barcode" class="w-10 h-10 mx-auto stroke-1 mb-2"></i>
+          <p class="text-sm">No code scanned yet</p>
+          <p class="text-xs text-slate-400 mt-0.5">Point camera at a code or upload a file</p>
+        </div>
+
+        <div id="result-content-container" class="hidden space-y-4">
+          <!-- Text Payload Container -->
+          <div class="relative bg-slate-50 dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800">
+            <pre id="result-text" class="text-xs sm:text-sm font-mono whitespace-pre-wrap break-all text-slate-800 dark:text-slate-200 max-h-48 overflow-y-auto"></pre>
+          </div>
+
+          <!-- Dynamic Actions Bar based on Content -->
+          <div class="flex flex-wrap gap-2">
+            <!-- Copy button -->
+            <button id="copy-result-btn" class="flex-1 inline-flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold transition-colors">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              <span id="copy-btn-text">Copy Text</span>
+            </button>
+
+            <!-- URL Opener Button (Hidden if text is not URL) -->
+            <a id="open-link-btn" href="#" target="_blank" rel="noopener noreferrer" class="hidden flex-1 inline-flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold transition-colors shadow-sm">
+              <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+              <span>Visit Link</span>
+            </a>
+
+            <!-- Web Share API (if supported) -->
+            <button id="share-btn" class="inline-flex items-center justify-center p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs transition-colors" title="Share Payload">
+              <i data-lucide="share-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- Meta timestamp -->
+          <p id="result-timestamp" class="text-[11px] text-slate-400 dark:text-slate-500 text-right"></p>
+        </div>
+      </div>
+
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm flex flex-col h-[320px]">
+        <div class="flex items-center justify-between mb-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center space-x-2">
+            <span class="p-1.5 rounded-lg bg-indigo-50 dark:bg-slate-800 text-brand-600 dark:text-brand-400">
+              <i data-lucide="history" class="w-4 h-4"></i>
+            </span>
+            <h2 class="text-sm font-semibold">Recent Scans</h2>
+            <span id="history-counter" class="text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium">0</span>
+          </div>
+          
+          <button id="clear-history-btn" class="text-xs text-rose-500 hover:text-rose-600 transition-colors font-medium">
+            Clear All
+          </button>
+        </div>
+
+        <!-- Scrollable List Area -->
+        <div id="history-list" class="flex-1 overflow-y-auto space-y-2.5 pr-1">
+          <!-- Empty list state -->
+          <div id="history-empty" class="h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 text-xs space-y-1">
+            <i data-lucide="inbox" class="w-8 h-8 stroke-1"></i>
+            <span>No scan history recorded</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2.5 rounded-xl shadow-xl flex items-center space-x-2 text-xs font-medium z-50 pointer-events-none">
+    <i data-lucide="check" class="w-4 h-4 text-emerald-400 dark:text-emerald-600"></i>
+    <span id="toast-message">Notification message</span>
+  </div>
+
+  <script>
+    /* Global Application State */
+    const STATE = {
+      html5QrCode: null,
+      isScanning: false,
+      activeCameraId: null,
+      availableCameras: [],
+      soundEnabled: true,
+      torchEnabled: false,
+      history: JSON.parse(localStorage.getItem('omniscan_history') || '[]'),
+      lastScannedData: null,
+      lastScannedTimestamp: 0,
+      audioCtx: null
+    };
+
+    /* Initialize Web Audio API for feedback chirp */
+    function playBeep() {
+      if (!STATE.soundEnabled) return;
+      try {
+        if (!STATE.audioCtx) {
+          STATE.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (STATE.audioCtx.state === 'suspended') {
+          STATE.audioCtx.resume();
+        }
+        const osc = STATE.audioCtx.createOscillator();
+        const gain = STATE.audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, STATE.audioCtx.currentTime); // A5 note
+        gain.gain.setValueAtTime(0.12, STATE.audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, STATE.audioCtx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(STATE.audioCtx.destination);
+        osc.start();
+        osc.stop(STATE.audioCtx.currentTime + 0.15);
+      } catch (err) {
+        console.warn('Audio playback error', err);
+      }
+    }
+
+    /* Helper: Show Floating Toast */
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-message');
+      toastMsg.textContent = message;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 2500);
+    }
+
+    /* Helper: Check URL */
+    function isValidUrl(string) {
+      try {
+        const url = new URL(string);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+      } catch (_) {
+        return false;
+      }
+    }
+
+    /* Helper: Format Relative Time */
+    function formatTime(isoStr) {
+      const d = new Date(isoStr);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function setupTheme() {
+      const savedTheme = localStorage.getItem('omniscan_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      applyTheme(savedTheme);
+
+      document.getElementById('theme-toggle').addEventListener('click', () => {
+        const isDark = document.documentElement.classList.contains('dark');
+        const nextTheme = isDark ? 'light' : 'dark';
+        applyTheme(nextTheme);
+        localStorage.setItem('omniscan_theme', nextTheme);
+      });
+    }
+
+    function applyTheme(theme) {
+      const sunIcon = document.getElementById('theme-icon-sun');
+      const moonIcon = document.getElementById('theme-icon-moon');
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        sunIcon.classList.remove('hidden');
+        moonIcon.classList.add('hidden');
+      } else {
+        document.documentElement.classList.remove('dark');
+        sunIcon.classList.add('hidden');
+        moonIcon.classList.remove('dark');
+        moonIcon.classList.remove('hidden');
+      }
+    }
+
+    /* Audio Toggle */
+    function setupAudioToggle() {
+      const audioBtn = document.getElementById('audio-toggle-btn');
+      const audioIcon = document.getElementById('audio-icon');
+      audioBtn.addEventListener('click', () => {
+        STATE.soundEnabled = !STATE.soundEnabled;
+        if (STATE.soundEnabled) {
+          audioIcon.setAttribute('data-lucide', 'volume-2');
+          showToast('Scan sound enabled');
+        } else {
+          audioIcon.setAttribute('data-lucide', 'volume-x');
+          showToast('Scan sound muted');
+        }
+        lucide.createIcons();
+      });
+    }
+
+    async function initCameraDevices() {
+      const cameraSelect = document.getElementById('camera-select');
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        STATE.availableCameras = devices || [];
+        
+        cameraSelect.innerHTML = '';
+        if (STATE.availableCameras.length === 0) {
+          cameraSelect.innerHTML = '<option value="">No cameras found</option>';
+          return;
+        }
+
+        STATE.availableCameras.forEach((cam, index) => {
+          const opt = document.createElement('option');
+          opt.value = cam.id;
+          opt.textContent = cam.label || `Camera ${index + 1}`;
+          cameraSelect.appendChild(opt);
+        });
+
+        // Prefer rear facing camera if available on mobile
+        const backCam = STATE.availableCameras.find(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('environment'));
+        if (backCam) {
+          STATE.activeCameraId = backCam.id;
+          cameraSelect.value = backCam.id;
+        } else {
+          STATE.activeCameraId = STATE.availableCameras[0].id;
+        }
+      } catch (err) {
+        console.warn('Camera enumeration error or permission denied:', err);
+        cameraSelect.innerHTML = '<option value="">Camera access blocked/unavailable</option>';
+      }
+    }
+
+    async function startScanner() {
+      if (STATE.isScanning) return;
+      const cameraSelect = document.getElementById('camera-select');
+      const selectedCamId = cameraSelect.value;
+
+      if (!selectedCamId && STATE.availableCameras.length > 0) {
+        showToast('Please select a valid camera');
+        return;
+      }
+
+      const idleCover = document.getElementById('scanner-idle');
+      const hud = document.getElementById('scan-hud');
+      const indicator = document.getElementById('scanner-indicator');
+      const statusText = document.getElementById('scanner-status-text');
+      const startBtn = document.getElementById('start-btn');
+      const stopBtn = document.getElementById('stop-btn');
+
+      try {
+        if (!STATE.html5QrCode) {
+          STATE.html5QrCode = new Html5Qrcode('qr-reader');
+        }
+
+        const config = {
+          fps: 15,
+          qrbox: (viewWidth, viewHeight) => {
+            const minEdge = Math.min(viewWidth, viewHeight);
+            const edge = Math.floor(minEdge * 0.72);
+            return { width: edge, height: edge };
+          },
+          aspectRatio: 1.333334
+        };
+
+        const cameraIdOrConfig = selectedCamId ? selectedCamId : { facingMode: "environment" };
+
+        await STATE.html5QrCode.start(
+          cameraIdOrConfig,
+          config,
+          onScanSuccess,
+          onScanFailure
+        );
+
+        STATE.isScanning = true;
+        idleCover.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => idleCover.classList.add('hidden'), 300);
+        hud.classList.remove('hidden');
+
+        indicator.classList.remove('bg-slate-400');
+        indicator.classList.add('bg-emerald-500', 'animate-pulse');
+        statusText.textContent = 'Active & Scanning';
+
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        
+        // Check flashlight capability
+        checkTorchCapability();
+
+      } catch (err) {
+        console.error('Failed to start scanner:', err);
+        showToast('Could not start camera: ' + (err.message || 'Permission denied'));
+        indicator.classList.remove('bg-emerald-500', 'animate-pulse');
+        indicator.classList.add('bg-rose-500');
+        statusText.textContent = 'Camera error';
+      }
+    }
+
+    async function stopScanner() {
+      if (!STATE.isScanning || !STATE.html5QrCode) return;
+
+      const idleCover = document.getElementById('scanner-idle');
+      const hud = document.getElementById('scan-hud');
+      const indicator = document.getElementById('scanner-indicator');
+      const statusText = document.getElementById('scanner-status-text');
+      const startBtn = document.getElementById('start-btn');
+      const stopBtn = document.getElementById('stop-btn');
+      const torchBtn = document.getElementById('torch-btn');
+
+      try {
+        await STATE.html5QrCode.stop();
+        STATE.isScanning = false;
+        torchBtn.classList.add('hidden');
+
+        idleCover.classList.remove('hidden');
+        setTimeout(() => idleCover.classList.remove('opacity-0', 'pointer-events-none'), 10);
+        hud.classList.add('hidden');
+
+        indicator.classList.remove('bg-emerald-500', 'animate-pulse', 'bg-rose-500');
+        indicator.classList.add('bg-slate-400');
+        statusText.textContent = 'Stopped';
+
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      } catch (err) {
+        console.error('Failed to stop scanner:', err);
+      }
+    }
+
+    /* Flashlight / Torch check */
+    function checkTorchCapability() {
+      const torchBtn = document.getElementById('torch-btn');
+      try {
+        if (STATE.html5QrCode && STATE.html5QrCode.getRunningTrackCameraCapabilities) {
+          const capabilities = STATE.html5QrCode.getRunningTrackCameraCapabilities();
+          if (capabilities.torchFeature().isSupported()) {
+            torchBtn.classList.remove('hidden');
+            return;
+          }
+        }
+      } catch (_) {}
+      torchBtn.classList.add('hidden');
+    }
+
+    function onScanSuccess(decodedText, decodedResult) {
+      const now = Date.now();
+      // Debounce exact duplicates within 1.5 seconds to avoid spamming
+      if (STATE.lastScannedData === decodedText && (now - STATE.lastScannedTimestamp) < 1600) {
+        return;
+      }
+
+      STATE.lastScannedData = decodedText;
+      STATE.lastScannedTimestamp = now;
+
+      // Audio chirp
+      playBeep();
+
+      // Vibration on supported mobile devices
+      if (navigator.vibrate) {
+        navigator.vibrate(80);
+      }
+
+      const format = decodedResult?.result?.format?.formatName || 'QR_CODE';
+      handleResultData(decodedText, format);
+    }
+
+    function onScanFailure(error) {
+      // Quiet background polling frames without matches; no action needed
+    }
+
+    function handleResultData(text, format = 'QR_CODE') {
+      const timestamp = new Date().toISOString();
+
+      // Display in Active Inspector
+      document.getElementById('no-result-state').classList.add('hidden');
+      const resultContainer = document.getElementById('result-content-container');
+      resultContainer.classList.remove('hidden');
+
+      const resultTextEl = document.getElementById('result-text');
+      resultTextEl.textContent = text;
+
+      const formatBadge = document.getElementById('result-format-badge');
+      formatBadge.textContent = format;
+      formatBadge.classList.remove('hidden');
+
+      document.getElementById('result-timestamp').textContent = `Scanned at ${formatTime(timestamp)}`;
+
+      // URL Action Handler
+      const openLinkBtn = document.getElementById('open-link-btn');
+      if (isValidUrl(text)) {
+        openLinkBtn.href = text;
+        openLinkBtn.classList.remove('hidden');
+      } else {
+        openLinkBtn.classList.add('hidden');
+      }
+
+      // Add to History
+      addToHistory({ text, format, timestamp });
+      showToast('Code successfully scanned!');
+    }
+
+    function addToHistory(item) {
+      // Prevent consecutive duplicate entries in list
+      if (STATE.history.length > 0 && STATE.history[0].text === item.text) {
+        STATE.history[0].timestamp = item.timestamp;
+      } else {
+        STATE.history.unshift(item);
+        if (STATE.history.length > 50) STATE.history.pop();
+      }
+
+      localStorage.setItem('omniscan_history', JSON.stringify(STATE.history));
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const container = document.getElementById('history-list');
+      const emptyState = document.getElementById('history-empty');
+      const counter = document.getElementById('history-counter');
+      
+      counter.textContent = STATE.history.length;
+
+      if (STATE.history.length === 0) {
+        container.innerHTML = '';
+        container.appendChild(emptyState);
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      container.innerHTML = '';
+
+      STATE.history.forEach((entry, idx) => {
+        const isUrl = isValidUrl(entry.text);
+        const card = document.createElement('div');
+        card.className = "p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all flex items-start justify-between gap-3 text-xs";
+        
+        card.innerHTML = `
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center space-x-1.5 mb-1 text-[11px] text-slate-400">
+              <span class="font-semibold text-slate-600 dark:text-slate-300 uppercase">${escapeHtml(entry.format || 'QR')}</span>
+              <span>•</span>
+              <span>${formatTime(entry.timestamp)}</span>
+            </div>
+            <div class="truncate font-mono text-slate-800 dark:text-slate-200 font-medium">${escapeHtml(entry.text)}</div>
+          </div>
+          <div class="flex items-center space-x-1">
+            ${isUrl ? `
+              <a href="${escapeHtml(entry.text)}" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-brand-600 dark:text-brand-400 transition-colors" title="Open Link">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+              </a>
+            ` : ''}
+            <button class="copy-item-btn p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors" data-text="${encodeURIComponent(entry.text)}" title="Copy">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      // Bind dynamic copy events
+      container.querySelectorAll('.copy-item-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const text = decodeURIComponent(e.currentTarget.getAttribute('data-text'));
+          copyToClipboard(text);
+        });
+      });
+
+      lucide.createIcons();
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+
+    /* Clipboard Copy Utility (fallback-safe for iFrames) */
+    function copyToClipboard(text) {
+      if (!text) return;
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.top = "0";
+      textArea.style.left = "0";
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+          showToast('Copied to clipboard!');
+        } else {
+          showToast('Failed to copy');
+        }
+      } catch (err) {
+        showToast('Copying not supported');
+      }
+      document.body.removeChild(textArea);
+    }
+
+    function setupFileUpload() {
+      const fileInput = document.getElementById('qr-file-input');
+      const dropLabel = fileInput.parentElement;
+      const previewCard = document.getElementById('file-preview-card');
+      const fileThumb = document.getElementById('file-thumb');
+      const fileName = document.getElementById('file-name');
+      const fileMeta = document.getElementById('file-meta');
+      const clearBtn = document.getElementById('clear-file-btn');
+
+      // Drag and drop highlights
+      ['dragenter', 'dragover'].forEach(name => {
+        dropLabel.addEventListener(name, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropLabel.classList.add('border-brand-500', 'bg-brand-50/50', 'dark:bg-brand-950/40');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(name => {
+        dropLabel.addEventListener(name, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropLabel.classList.remove('border-brand-500', 'bg-brand-50/50', 'dark:bg-brand-950/40');
+        });
+      });
+
+      dropLabel.addEventListener('drop', (e) => {
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          processImageFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          processImageFile(e.target.files[0]);
+        }
+      });
+
+      clearBtn.addEventListener('click', () => {
+        previewCard.classList.add('hidden');
+        fileInput.value = '';
+      });
+
+      async function processImageFile(file) {
+        if (!file.type.startsWith('image/')) {
+          showToast('Please upload a valid image file');
+          return;
+        }
+
+        // Preview rendering
+        fileName.textContent = file.name;
+        fileMeta.textContent = `${(file.size / 1024).toFixed(1)} KB • Decoding...`;
+        fileThumb.src = URL.createObjectURL(file);
+        previewCard.classList.remove('hidden');
+
+        try {
+          if (!STATE.html5QrCode) {
+            STATE.html5QrCode = new Html5Qrcode('qr-reader');
+          }
+
+          // Scan file directly using Html5Qrcode API
+          const decodedText = await STATE.html5QrCode.scanFile(file, true);
+          fileMeta.textContent = `${(file.size / 1024).toFixed(1)} KB • Decoded successfully`;
+          handleResultData(decodedText, 'QR_IMAGE');
+        } catch (err) {
+          console.error('File scan error:', err);
+          fileMeta.textContent = 'No QR code or barcode found in image';
+          showToast('No readable QR code found in this image');
+        }
+      }
+    }
+
+    function setupInteractions() {
+      // Tab Navigation
+      const liveTab = document.getElementById('tab-live');
+      const uploadTab = document.getElementById('tab-upload');
+      const cameraSection = document.getElementById('camera-section');
+      const uploadSection = document.getElementById('upload-section');
+
+      liveTab.addEventListener('click', () => {
+        liveTab.className = "flex-1 py-2 px-3.5 rounded-lg text-sm font-semibold flex items-center justify-center space-x-2 transition-all shadow-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-white";
+        uploadTab.className = "flex-1 py-2 px-3.5 rounded-lg text-sm font-medium flex items-center justify-center space-x-2 transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white";
+        cameraSection.classList.remove('hidden');
+        uploadSection.classList.add('hidden');
+      });
+
+      uploadTab.addEventListener('click', () => {
+        uploadTab.className = "flex-1 py-2 px-3.5 rounded-lg text-sm font-semibold flex items-center justify-center space-x-2 transition-all shadow-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-white";
+        liveTab.className = "flex-1 py-2 px-3.5 rounded-lg text-sm font-medium flex items-center justify-center space-x-2 transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white";
+        uploadSection.classList.remove('hidden');
+        cameraSection.classList.add('hidden');
+        // Stop camera if user switches to upload tab
+        if (STATE.isScanning) {
+          stopScanner();
+        }
+      });
+
+      // Controls
+      document.getElementById('start-btn').addEventListener('click', startScanner);
+      document.getElementById('stop-btn').addEventListener('click', stopScanner);
+
+      // Flashlight toggle
+      document.getElementById('torch-btn').addEventListener('click', async () => {
+        try {
+          if (STATE.html5QrCode) {
+            STATE.torchEnabled = !STATE.torchEnabled;
+            await STATE.html5QrCode.applyVideoConstraints({
+              advanced: [{ torch: STATE.torchEnabled }]
+            });
+            showToast(STATE.torchEnabled ? 'Torch On' : 'Torch Off');
+          }
+        } catch (err) {
+          showToast('Torch control error');
+        }
+      });
+
+      // Copy Active Text
+      document.getElementById('copy-result-btn').addEventListener('click', () => {
+        const text = document.getElementById('result-text').textContent;
+        copyToClipboard(text);
+      });
+
+      // Native Share API
+      document.getElementById('share-btn').addEventListener('click', () => {
+        const text = document.getElementById('result-text').textContent;
+        if (navigator.share) {
+          navigator.share({
+            title: 'Scanned QR Code',
+            text: text
+          }).catch(() => {});
+        } else {
+          copyToClipboard(text);
+        }
+      });
+
+      // Clear History
+      document.getElementById('clear-history-btn').addEventListener('click', () => {
+        STATE.history = [];
+        localStorage.removeItem('omniscan_history');
+        renderHistory();
+        showToast('History cleared');
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      setupTheme();
+      setupAudioToggle();
+      setupInteractions();
+      setupFileUpload();
+      renderHistory();
+      lucide.createIcons();
+      await initCameraDevices();
+    });
+
+    // Cleanup on window unload
+    window.addEventListener('beforeunload', () => {
+      if (STATE.isScanning && STATE.html5QrCode) {
+        STATE.html5QrCode.stop().catch(() => {});
+      }
+    });
+  </script>
+</body>
+</html>
