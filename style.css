@@ -1,0 +1,36 @@
+ /* Custom scan target styling & camera frame overrides */
+    #qr-reader {
+      border: none !important;
+    }
+    #qr-reader video {
+      border-radius: 1rem;
+      object-fit: cover !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    #qr-reader__scan_region {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #qr-reader__dashboard_section_csr,
+    #qr-reader__dashboard_section_swaplink,
+    #qr-reader__header_message {
+      display: none !important;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(156, 163, 175, 0.4);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(156, 163, 175, 0.7);
+    }
